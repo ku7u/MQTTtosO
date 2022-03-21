@@ -1,3 +1,4 @@
+// Copyright 2022 George F. Hofmann
 
 #include "bod.h"
 #include "routines.h"
@@ -64,15 +65,20 @@ bool detector::check()
 
     // replace the detector bits in _flagBits with the new ones
     _flagBits &= B00111100; // clear bits 0, 1 first
-    _flagBits |= _testByte;  // insert the new bits 0, 1
+    _flagBits |= _testByte; // insert the new bits 0, 1
+
+/*
+  _flagBits[n] bit assignments
+  bit 0  = east detector
+      1  = west detector
+      2  = entered from east, westbound
+      3  = entered from west. eastbound
+      4  = staged westbound
+      5  = staged eastbound
+*/
 
     switch (_flagBits)
     {
-        // on startup, if both detectors are totally obscured we have to ignore it
-        // don't know where it came from
-        // will result in an uncounted axle in a block which will be cleared when it leaves
-        // storing the flagbits status prevents this from occurring
-
     case B00000000:
         break; // no more work to do
 

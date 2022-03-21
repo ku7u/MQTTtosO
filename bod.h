@@ -1,3 +1,5 @@
+// Copyright 2022 George F. Hofmann
+
 #ifndef BOD_H
 #define BOD_H
 #include <Arduino.h>

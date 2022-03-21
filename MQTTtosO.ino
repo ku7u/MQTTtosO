@@ -1,4 +1,4 @@
-
+// Copyright 2022 George F. Hofmann
 
 /*
   Pin assignments:
