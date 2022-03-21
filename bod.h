@@ -17,11 +17,10 @@ public:
     uint8_t getBlockWest();
     uint8_t getBlockEast();
     bool check();
-    void poll();
     bool detected();
     uint8_t direction();
-    uint8_t westCount;
-    uint8_t eastCount;
+    uint16_t westCount;
+    uint16_t eastCount;
     bool westKeeper;
     bool eastKeeper;
     bool displayDetect = false;
