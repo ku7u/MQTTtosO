@@ -126,7 +126,7 @@ void setup()
 
   // get the stored configuration values, defaults are the second parameter in the list
   myPrefs.begin("general");
-  BTname = myPrefs.getString("BTname", "CANtosNode");
+  BTname = myPrefs.getString("BTname", "MQTTtosNode");
   BTpassword = myPrefs.getString("password", "IGNORE");
   SSID = myPrefs.getString("SSID", "none");
   wifiPassword = myPrefs.getString("wifipassword", "none");
@@ -222,7 +222,8 @@ void setup_wifi()
       {
         flushSerialIn();
         if (pwCheck())
-          setCredentials();
+          // setCredentials();
+          configure();
         // the device will be rebooted at this point after the operator resets credentials
       }
     }
@@ -270,7 +271,8 @@ void reconnect()
       {
         flushSerialIn();
         if (pwCheck())
-          setMQTT();
+          // setMQTT();
+          configure();
         // the device will be rebooted at this point after the operator resets mqtt server
       }
       delay(2000);
@@ -489,6 +491,7 @@ void showMenu()
   BTSerial.println(" 'G' - Ghostbuster");
   BTSerial.println(" 'Z' - Turn off Bluetooth until reset from pin 2");
   BTSerial.println(" 'D' - Debug display on/off");
+  BTSerial.println(" 'S' - Restart machine");
 
   BTSerial.println("\n Enter 'R' to return to run mode (automatic after 30 sec of inactivity)");
 }
@@ -521,7 +524,7 @@ void configure()
     switch (getUpperChar(millis()))
     {
     case 'B': // set node name
-      BTSerial.print("\nEnter node name (device must be rebooted to take effect): ");
+      BTSerial.print("\nEnter node name: ");
       while (!BTSerial.available())
       {
       }
@@ -532,10 +535,7 @@ void configure()
       myPrefs.end();
       BTSerial.print("Changed to ");
       BTSerial.println(BTname);
-      BTSerial.print("\nReboot now?");
-      if (getUpperChar(0) == 'Y')
-        delay(3000);
-      ESP.restart();
+BTSerial.println("\nReboot is required");
       break;
 
     case 'I': // block IDs
@@ -551,7 +551,7 @@ void configure()
         BTSerial.println("Block not found on this node");
       break;
 
-    case 'P':  // print status
+    case 'P': // print status
       BTSerial.println("\nCurrent configuration");
       ipAdr = WiFi.localIP();
       BTSerial.print("Local IP address = ");
@@ -583,12 +583,12 @@ void configure()
       BTSerial.println(pw);
       break;
 
-    case 'W': // wifi credentials
-      setCredentials(); // also called explicitly
+    case 'W':           // wifi credentials
+      setCredentials(); 
       break;
 
-    case 'M': // mqtt server IP address
-      setMQTT(); // also called explicitly
+    case 'M':    // mqtt server IP address
+      setMQTT(); 
       break;
 
     case 'C': // set mqtt channel
@@ -607,9 +607,7 @@ void configure()
       myPrefs.end();
       BTSerial.print("\nChanged to ");
       BTSerial.println(myString);
-      BTSerial.println("\nDevice will now be rebooted...");
-      delay(3000);
-      ESP.restart();
+      BTSerial.println("\nReboot is required");
       break;
 
     case 'N': // mqtt node name
@@ -626,9 +624,7 @@ void configure()
       myPrefs.end();
       BTSerial.print("Changed to ");
       BTSerial.println(myString);
-      BTSerial.println("\nDevice will now be rebooted...");
-      delay(3000);
-      ESP.restart();
+      BTSerial.println("\nReboot is required ");
       break;
 
     case 'Z': // Bluetooth off
@@ -639,7 +635,7 @@ void configure()
       BTSerial.disconnect();
       break;
 
-    case 'D':  // debug
+    case 'D': // debug
       BTSerial.println("Turn debug display on ('Y') or off ('N') ");
       myChar = getUpperChar(30000);
       BTSerial.println("Which detector (1-8)?");
@@ -647,10 +643,16 @@ void configure()
       bod[devID - 1].setDisplayDetect(myChar == 'Y');
       break;
 
-    case 'R':  // return
+    case 'R': // return
       BTSerial.println("\nBack to run mode");
       BTSerial.disconnect();
       return;
+
+    case 'S': // reboot
+      BTSerial.println("\nDevice will now be rebooted...");
+      delay(3000);
+      ESP.restart();
+      break;
 
     default:
       beenHereDoneThat = false;
