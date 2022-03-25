@@ -51,6 +51,7 @@ SOFTWARE.
    39  input only, external pullup required
    */
 
+#include <iostream>
 #include <Preferences.h>
 #include <PubSubClient.h>
 #include "WiFi.h"
@@ -74,6 +75,7 @@ char mqttchannel[50];
 char blockTopic[100];
 char looseBlockIncreaseTopic[100];
 char looseBlockDecreaseTopic[100];
+char ghostBlockZeroTopic[100];
 PubSubClient client(espClient);
 
 BluetoothSerial BTSerial;
@@ -158,11 +160,13 @@ void setup()
 
   // BOD specific
   strcpy(blockTopic, mqttchannel);
-  strcat(blockTopic, "track/sensor/BODblock");
+  strcat(blockTopic, "track/sensor/BOD/block/");
   strcpy(looseBlockIncreaseTopic, mqttchannel);
   strcat(looseBlockIncreaseTopic, "looseblock/increase");
   strcpy(looseBlockDecreaseTopic, mqttchannel);
   strcat(looseBlockDecreaseTopic, "looseblock/decrease");
+  strcpy(ghostBlockZeroTopic, mqttchannel);
+  strcat(ghostBlockZeroTopic, "track/sensor/send/BOD/block/");
 
   // read the detector parameters from memory and apply to objects
   for (int i = 0; i < numDevices; i++)
@@ -250,6 +254,9 @@ void reconnect()
       strcpy(subscription, mqttchannel);
       strcat(subscription, "looseblock/+");
       client.subscribe(subscription); // accept all channel/looseBlock topics
+      strcpy(subscription, mqttchannel);
+      strcat(subscription, "track/sensor/send/BOD/block/+"); // these are ghost buster (zero a block) commands from JMRI
+      client.subscribe(subscription);
     }
     else
     {
@@ -302,6 +309,7 @@ void loop()
   {
     reconnect();
   }
+  
   client.loop();
 
   // if operator connects via Bluetooth and then enters a blank line we display the configure menu
@@ -320,19 +328,34 @@ void loop()
 // this is a callback from the mqtt object, made when a subscribed message comes in
 void callback(char *topic, byte *message, unsigned int length)
 {
-  uint16_t blockID;
-  if (strcmp(looseBlockIncreaseTopic, topic))
+  uint8_t blockID;
+  string topicString;
+
+Serial.println("in callback");
+
+
+  blockID = message[0];
+  topicString = string(topic);
+
+  if (strcmp(looseBlockIncreaseTopic, topic) == 0)
   {
     // call processDetectors with the blockID and increase
-    uint8_t _blockID = message[0];
-    procDetectors((byte)_blockID, true);
+    procDetectors((byte)blockID, true);
+    return;
   }
 
-  if (strcmp(looseBlockDecreaseTopic, topic))
+  if (strcmp(looseBlockDecreaseTopic, topic) == 0)
   {
     // call processDetectors with the blockID and decrease
-    uint8_t _blockID = message[0];
     procDetectors((byte)blockID, false);
+    return;
+  }
+
+  if (strcmp(ghostBlockZeroTopic, topicString.substr(0,topicString.find_last_of('/') + 1).c_str()) == 0)
+  {
+    // find a local block/keeper for this block and zero the block count
+    blockID = atoi(topicString.substr(topicString.find_last_of('/') + 1).c_str());
+    ghostBuster(blockID);
   }
 }
 
@@ -535,7 +558,7 @@ void configure()
       myPrefs.end();
       BTSerial.print("Changed to ");
       BTSerial.println(BTname);
-BTSerial.println("\nReboot is required");
+      BTSerial.println("\nReboot is required");
       break;
 
     case 'I': // block IDs
@@ -583,12 +606,12 @@ BTSerial.println("\nReboot is required");
       BTSerial.println(pw);
       break;
 
-    case 'W':           // wifi credentials
-      setCredentials(); 
+    case 'W': // wifi credentials
+      setCredentials();
       break;
 
-    case 'M':    // mqtt server IP address
-      setMQTT(); 
+    case 'M': // mqtt server IP address
+      setMQTT();
       break;
 
     case 'C': // set mqtt channel
@@ -645,7 +668,7 @@ BTSerial.println("\nReboot is required");
 
     case 'R': // return
       BTSerial.println("\nBack to run mode");
-      BTSerial.disconnect();
+      // BTSerial.disconnect();
       return;
 
     case 'S': // reboot
@@ -832,11 +855,13 @@ bool ghostBuster(uint8_t blockID)
     if ((bod[i].getBlockWest() == blockID) && (bod[i].westKeeper))
     {
       bod[i].westCount = 0;
+      BTSerial.println("zeroed west");
       return true;
     }
     else if ((bod[i].getBlockEast() == blockID) && (bod[i].eastKeeper))
     {
       bod[i].eastCount = 0;
+      BTSerial.println("zeroed east");
       return true;
     }
   }
