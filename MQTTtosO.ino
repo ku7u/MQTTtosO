@@ -84,6 +84,8 @@ String BTpassword;
 String pwCandidate;
 String pwtest;
 
+String nodeName;
+
 // constants and variables - detectors
 const uint8_t numDevices = 8;
 const byte WEST = 0;
@@ -128,13 +130,14 @@ void setup()
 
   // get the stored configuration values, defaults are the second parameter in the list
   myPrefs.begin("general");
-  BTname = myPrefs.getString("BTname", "MQTTtosNode");
+  nodeName = myPrefs.getString("nodename", "MQTTtosNode");
+  // BTname = myPrefs.getString("BTname", "MQTTtosNode");
+  BTname = nodeName;
   BTpassword = myPrefs.getString("password", "IGNORE");
   SSID = myPrefs.getString("SSID", "none");
   wifiPassword = myPrefs.getString("wifipassword", "none");
   mqttServer = myPrefs.getString("mqttserver", "none");
-  mqttNode = myPrefs.getString("mqttnode", "noname");
-  // mqttChannel = myPrefs.getString("mqttchannel", "trains");
+  // mqttNode = myPrefs.getString("mqttnode", "noname");
   strcpy(mqttchannel, myPrefs.getString("mqttchannel", "trains/").c_str());
   myPrefs.end();
 
@@ -143,8 +146,7 @@ void setup()
   // Bluetooth
   // myPrefs.begin("general");
   // if (myPrefs.getBool("BTon", true))
-
-  BTSerial.begin(BTname);
+  BTSerial.begin(nodeName);
   // myPrefs.end();
 
   // WiFi
@@ -239,8 +241,8 @@ void reconnect()
 {
   bool flasher = false;
 
-  char mqtt_node[mqttNode.length() + 1];
-  strcpy(mqtt_node, mqttNode.c_str());
+  char mqtt_node[nodeName.length() + 1];
+  strcpy(mqtt_node, nodeName.c_str());
 
   // Loop until we're reconnected TBD change all Serial to BTSerial (maybe)
   while (!client.connected())
@@ -253,10 +255,10 @@ void reconnect()
       char subscription[50];
       strcpy(subscription, mqttchannel);
       strcat(subscription, "looseblock/+");
-      client.subscribe(subscription); // accept all channel/looseBlock topics
+      client.subscribe(subscription, 1); // accept all channel/looseBlock topics
       strcpy(subscription, mqttchannel);
       strcat(subscription, "track/sensor/send/BOD/block/+"); // these are ghost buster (zero a block) commands from JMRI
-      client.subscribe(subscription);
+      client.subscribe(subscription, 1);
     }
     else
     {
@@ -337,6 +339,7 @@ Serial.println("in callback");
   blockID = message[0];
   topicString = string(topic);
 
+  // another detector could not handle a changed block since it was not its brother's keeper
   if (strcmp(looseBlockIncreaseTopic, topic) == 0)
   {
     // call processDetectors with the blockID and increase
@@ -344,6 +347,7 @@ Serial.println("in callback");
     return;
   }
 
+  // another detector could not handle a changed block since it was not its brother's keeper
   if (strcmp(looseBlockDecreaseTopic, topic) == 0)
   {
     // call processDetectors with the blockID and decrease
@@ -351,11 +355,13 @@ Serial.println("in callback");
     return;
   }
 
+  // a block was selected to be zeroed in JMRI
   if (strcmp(ghostBlockZeroTopic, topicString.substr(0,topicString.find_last_of('/') + 1).c_str()) == 0)
   {
     // find a local block/keeper for this block and zero the block count
     blockID = atoi(topicString.substr(topicString.find_last_of('/') + 1).c_str());
     ghostBuster(blockID);
+    return;
   }
 }
 
@@ -504,17 +510,16 @@ void showMenu()
   BTSerial.println(BTname);
   BTSerial.println("\n Enter: ");
   BTSerial.println(" 'P' - Print status");
-  BTSerial.println(" 'B' - Set Bluetooth node name");
+  BTSerial.println(" 'N' - Set node name");
   BTSerial.println(" 'X' - Set Bluetooth password");
   BTSerial.println(" 'W' - Set WiFi credentials");
   BTSerial.println(" 'M' - Set MQTT server IP address");
   BTSerial.println(" 'C' - Set MQTT channel");
-  BTSerial.println(" 'N' - Set node name");
   BTSerial.println(" 'I' - Set block IDs and keeper status");
   BTSerial.println(" 'G' - Ghostbuster");
-  BTSerial.println(" 'Z' - Turn off Bluetooth until reset from pin 2");
-  BTSerial.println(" 'D' - Debug display on/off");
-  BTSerial.println(" 'S' - Restart machine");
+  // BTSerial.println(" 'Z' - Turn off Bluetooth (resume by grounding pin 2)");
+  // BTSerial.println(" 'D' - Debug display on/off");
+  BTSerial.println(" 'B' - Restart machine");
 
   BTSerial.println("\n Enter 'R' to return to run mode (automatic after 30 sec of inactivity)");
 }
@@ -546,20 +551,20 @@ void configure()
 
     switch (getUpperChar(millis()))
     {
-    case 'B': // set node name
-      BTSerial.print("\nEnter node name: ");
-      while (!BTSerial.available())
-      {
-      }
-      BTname = BTSerial.readString();
-      BTname.trim();
-      myPrefs.begin("general", false);
-      myPrefs.putString("BTname", BTname);
-      myPrefs.end();
-      BTSerial.print("Changed to ");
-      BTSerial.println(BTname);
-      BTSerial.println("\nReboot is required");
-      break;
+    // case 'B': // set node name
+    //   BTSerial.print("\nEnter node name: ");
+    //   while (!BTSerial.available())
+    //   {
+    //   }
+    //   BTname = BTSerial.readString();
+    //   BTname.trim();
+    //   myPrefs.begin("general", false);
+    //   myPrefs.putString("BTname", BTname);
+    //   myPrefs.end();
+    //   BTSerial.print("Changed to ");
+    //   BTSerial.println(BTname);
+    //   BTSerial.println("\nReboot is required");
+    //   break;
 
     case 'I': // block IDs
       wcDetectorConfiguration();
@@ -576,6 +581,8 @@ void configure()
 
     case 'P': // print status
       BTSerial.println("\nCurrent configuration");
+      BTSerial.print("Node name (MQTT and Bluetooth) = ");
+      BTSerial.println(nodeName);
       ipAdr = WiFi.localIP();
       BTSerial.print("Local IP address = ");
       BTSerial.println(ipAdr);
@@ -583,12 +590,12 @@ void configure()
       BTSerial.println(SSID);
       BTSerial.print("MQTT server = ");
       BTSerial.println(mqttServer);
-      BTSerial.print("MQTT node name = ");
-      BTSerial.println(mqttNode);
+      // BTSerial.print("MQTT node name = ");
+      // BTSerial.println(mqttNode);
       BTSerial.print("MQTT channel = ");
       BTSerial.println(mqttchannel);
-      BTSerial.print("Bluetooth node name = ");
-      BTSerial.println(BTname);
+      // BTSerial.print("Bluetooth node name = ");
+      // BTSerial.println(BTname);
       break;
 
     case 'X': // Bluetooth password
@@ -633,7 +640,7 @@ void configure()
       BTSerial.println("\nReboot is required");
       break;
 
-    case 'N': // mqtt node name
+    case 'N': // node name
       BTSerial.println("Enter a name for this node or blank to exit. Used by MQTT, must be unique: ");
       while (!BTSerial.available())
       {
@@ -643,7 +650,7 @@ void configure()
       if (myString.length() == 0)
         break;
       myPrefs.begin("general", false);
-      myPrefs.putString("mqttnode", myString);
+      myPrefs.putString("nodename", myString);
       myPrefs.end();
       BTSerial.print("Changed to ");
       BTSerial.println(myString);
@@ -671,7 +678,7 @@ void configure()
       // BTSerial.disconnect();
       return;
 
-    case 'S': // reboot
+    case 'B': // reboot
       BTSerial.println("\nDevice will now be rebooted...");
       delay(3000);
       ESP.restart();
