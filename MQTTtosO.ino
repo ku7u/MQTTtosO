@@ -131,17 +131,14 @@ void setup()
   // get the stored configuration values, defaults are the second parameter in the list
   myPrefs.begin("general");
   nodeName = myPrefs.getString("nodename", "MQTTtosNode");
-  // BTname = myPrefs.getString("BTname", "MQTTtosNode");
   BTname = nodeName;
   BTpassword = myPrefs.getString("password", "IGNORE");
   SSID = myPrefs.getString("SSID", "none");
   wifiPassword = myPrefs.getString("wifipassword", "none");
   mqttServer = myPrefs.getString("mqttserver", "none");
-  // mqttNode = myPrefs.getString("mqttnode", "noname");
+  // mqttNode = myPrefs.getString("mqttnode", "noname"); TBD standardize string handling
   strcpy(mqttchannel, myPrefs.getString("mqttchannel", "trains/").c_str());
   myPrefs.end();
-
-  // wifiPassword = "Bogus";
 
   // Bluetooth
   // myPrefs.begin("general");
@@ -158,6 +155,7 @@ void setup()
   uint8_t ip[4];
   sscanf(mqtt_server, "%u.%u.%u.%u", &ip[0], &ip[1], &ip[2], &ip[3]);
   client.setServer(ip, 1883);
+  client.setKeepAlive(60);
   client.setCallback(callback);
 
   // BOD specific
@@ -506,7 +504,7 @@ bool procDetectors(byte blockID, bool increase)
 void showMenu()
 {
   BTSerial.println(" ");
-  BTSerial.print("\nMain menu for ");
+  BTSerial.print("\nBlock Occupancy Detector Main Menu for ");
   BTSerial.println(BTname);
   BTSerial.println("\n Enter: ");
   BTSerial.println(" 'P' - Print status");
@@ -551,21 +549,6 @@ void configure()
 
     switch (getUpperChar(millis()))
     {
-    // case 'B': // set node name
-    //   BTSerial.print("\nEnter node name: ");
-    //   while (!BTSerial.available())
-    //   {
-    //   }
-    //   BTname = BTSerial.readString();
-    //   BTname.trim();
-    //   myPrefs.begin("general", false);
-    //   myPrefs.putString("BTname", BTname);
-    //   myPrefs.end();
-    //   BTSerial.print("Changed to ");
-    //   BTSerial.println(BTname);
-    //   BTSerial.println("\nReboot is required");
-    //   break;
-
     case 'I': // block IDs
       wcDetectorConfiguration();
       break;
