@@ -141,10 +141,10 @@ void setup()
   myPrefs.end();
 
   // Bluetooth
-  // myPrefs.begin("general");
-  // if (myPrefs.getBool("BTon", true))
+  myPrefs.begin("general");
+  if (myPrefs.getBool("BTon", true))
   BTSerial.begin(nodeName);
-  // myPrefs.end();
+  myPrefs.end();
 
   // WiFi
   setup_wifi();
@@ -213,8 +213,8 @@ void setup_wifi()
 
   if (WiFi.status() == WL_CONNECTED)
   {
-    digitalWrite(2, LOW);
-    pinMode(2, INPUT);
+    // digitalWrite(2, HIGH);
+    pinMode(2, INPUT_PULLUP);
     return;
   }
   else
@@ -293,15 +293,15 @@ void loop()
   // this will reset the password to "IGNORE" and turn on Bluetooth
   // use this if Bluetooth has been disabled from the menu (to prevent hackers in the house)
   // or if password was forgotten
-  // if (digitalRead(2) == LOW)
-  // {
-  //   BTSerial.begin();
-  //   myPrefs.begin("general", false);
-  //   myPrefs.putBool("BTon", true);
-  //   myPrefs.putString("password", "IGNORE");
-  //   myPrefs.end();
-  //   configure(); TBD
-  // }
+  if (digitalRead(2) == LOW)
+  {
+    BTSerial.begin(nodeName);
+    myPrefs.begin("general", false);
+    myPrefs.putBool("BTon", true);
+    myPrefs.putString("password", "IGNORE");
+    myPrefs.end();
+    configure(); 
+  }
 
   // establish and maintain the mqtt connection
   // it will disconnect if we are fiddling with the menu
@@ -515,7 +515,7 @@ void showMenu()
   BTSerial.println(" 'C' - Set MQTT channel");
   BTSerial.println(" 'I' - Set block IDs and keeper status");
   BTSerial.println(" 'G' - Ghostbuster");
-  // BTSerial.println(" 'Z' - Turn off Bluetooth (resume by grounding pin 2)");
+  BTSerial.println(" 'Z' - Turn off Bluetooth (resume by grounding pin 2)");
   // BTSerial.println(" 'D' - Debug display on/off");
   BTSerial.println(" 'B' - Restart machine");
 
