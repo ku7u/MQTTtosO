@@ -20,9 +20,8 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-*/
 
-/*
+
   Pin assignments:
    01  TX0
    02  switch for configuration via bluetooth
@@ -90,7 +89,6 @@ String nodeName;
 const uint8_t numDevices = 8;
 const byte WEST = 0;
 const byte EAST = 1;
-// String detName[numDevices];
 
 // detector pins
 const uint16_t pinDet1W = 13;
@@ -136,7 +134,6 @@ void setup()
   SSID = myPrefs.getString("SSID", "none");
   wifiPassword = myPrefs.getString("wifipassword", "none");
   mqttServer = myPrefs.getString("mqttserver", "none");
-  // mqttNode = myPrefs.getString("mqttnode", "noname"); TBD standardize string handling
   strcpy(mqttchannel, myPrefs.getString("mqttchannel", "trains/").c_str());
   myPrefs.end();
 
@@ -176,7 +173,6 @@ void setup()
     bod[i].setBlockEast(myPrefs.getUShort("blockEast", 0));
     bod[i].setWestKeeper(myPrefs.getBool("westkeeper", false));
     bod[i].setEastKeeper(myPrefs.getBool("eastkeeper", false));
-    // detName[i] = myPrefs.getString("name", "noname");
     myPrefs.end();
   }
 }
@@ -201,7 +197,7 @@ void setup_wifi()
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(300);
-    Serial.print(".");
+    // Serial.print(".");
     // blink the blue LED to indicate error condition
     digitalWrite(2, HIGH);
     delay(300);
@@ -226,7 +222,6 @@ void setup_wifi()
       {
         flushSerialIn();
         if (pwCheck())
-          // setCredentials();
           configure();
         // the device will be rebooted at this point after the operator resets credentials
       }
@@ -278,7 +273,6 @@ void reconnect()
       {
         flushSerialIn();
         if (pwCheck())
-          // setMQTT();
           configure();
         // the device will be rebooted at this point after the operator resets mqtt server
       }
@@ -288,6 +282,7 @@ void reconnect()
 }
 
 /*****************************************************************************/
+// just do this over and over and over and...
 void loop()
 {
   // this will reset the password to "IGNORE" and turn on Bluetooth
@@ -331,9 +326,6 @@ void callback(char *topic, byte *message, unsigned int length)
   uint8_t blockID;
   string topicString;
 
-Serial.println("in callback");
-
-
   blockID = message[0];
   topicString = string(topic);
 
@@ -341,6 +333,7 @@ Serial.println("in callback");
   if (strcmp(looseBlockIncreaseTopic, topic) == 0)
   {
     // call processDetectors with the blockID and increase
+    // currently this node will process its own message which is unnecessary
     procDetectors((byte)blockID, true);
     return;
   }
@@ -349,6 +342,7 @@ Serial.println("in callback");
   if (strcmp(looseBlockDecreaseTopic, topic) == 0)
   {
     // call processDetectors with the blockID and decrease
+    // currently this node will process its own message which is unnecessary
     procDetectors((byte)blockID, false);
     return;
   }
@@ -573,12 +567,8 @@ void configure()
       BTSerial.println(SSID);
       BTSerial.print("MQTT server = ");
       BTSerial.println(mqttServer);
-      // BTSerial.print("MQTT node name = ");
-      // BTSerial.println(mqttNode);
       BTSerial.print("MQTT channel = ");
       BTSerial.println(mqttchannel);
-      // BTSerial.print("Bluetooth node name = ");
-      // BTSerial.println(BTname);
       break;
 
     case 'X': // Bluetooth password
@@ -675,6 +665,7 @@ void configure()
 }
 
 /*****************************************************************************/
+// wifi credentials
 void setCredentials()
 {
   String myString;
@@ -706,6 +697,7 @@ void setCredentials()
 }
 
 /*****************************************************************************/
+// assign the MQTT server
 void setMQTT()
 {
   String myString;
@@ -926,7 +918,6 @@ int getNumber(int min, int max)
 
 /*****************************************************************************/
 // tests password
-
 bool pwCheck()
 {
   uint32_t startTime;
