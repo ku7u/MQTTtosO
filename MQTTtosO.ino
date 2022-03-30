@@ -50,6 +50,8 @@ SOFTWARE.
    39  input only, external pullup required
    */
 
+#define version "1.0"
+
 #include <iostream>
 #include <Preferences.h>
 #include <PubSubClient.h>
@@ -124,7 +126,7 @@ void setup()
   byte myVal;
 
   Serial.begin(115200);     // TBD leave this?
-  pinMode(2, INPUT_PULLUP); // this is used for restoring Bluetooth if turned off from menu
+  pinMode(5, INPUT_PULLUP); // this is used for restoring Bluetooth if turned off from menu
 
   // get the stored configuration values, defaults are the second parameter in the list
   myPrefs.begin("general");
@@ -134,13 +136,14 @@ void setup()
   SSID = myPrefs.getString("SSID", "none");
   wifiPassword = myPrefs.getString("wifipassword", "none");
   mqttServer = myPrefs.getString("mqttserver", "none");
-  strcpy(mqttchannel, myPrefs.getString("mqttchannel", "trains/").c_str());
+  mqttChannel = myPrefs.getString("mqttchannel", "trains/");
+  strcpy(mqttchannel, mqttChannel.c_str());
   myPrefs.end();
 
   // Bluetooth
   myPrefs.begin("general");
   if (myPrefs.getBool("BTon", true))
-  BTSerial.begin(nodeName);
+    BTSerial.begin(nodeName);
   myPrefs.end();
 
   // WiFi
@@ -154,8 +157,12 @@ void setup()
   client.setServer(ip, 1883);
   client.setKeepAlive(60);
   client.setCallback(callback);
+  connectMQTT();
 
   // BOD specific
+  setupSubscriptions(); // also must be called on a reconnect
+
+  // define topics
   strcpy(blockTopic, mqttchannel);
   strcat(blockTopic, "track/sensor/BOD/block/");
   strcpy(looseBlockIncreaseTopic, mqttchannel);
@@ -197,7 +204,6 @@ void setup_wifi()
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(300);
-    // Serial.print(".");
     // blink the blue LED to indicate error condition
     digitalWrite(2, HIGH);
     delay(300);
@@ -209,7 +215,6 @@ void setup_wifi()
 
   if (WiFi.status() == WL_CONNECTED)
   {
-    // digitalWrite(2, HIGH);
     pinMode(2, INPUT_PULLUP);
     return;
   }
@@ -230,55 +235,57 @@ void setup_wifi()
 }
 
 /*****************************************************************************/
-void reconnect()
+void connectMQTT()
 {
   bool flasher = false;
 
   char mqtt_node[nodeName.length() + 1];
   strcpy(mqtt_node, nodeName.c_str());
 
-  // Loop until we're reconnected TBD change all Serial to BTSerial (maybe)
-  while (!client.connected())
-  {
-    Serial.print("Attempting MQTT connection...");
-    // Attempt to connect
-    if (client.connect(mqtt_node)) // TBD this must be unique among nodes
-    {
-      Serial.println("connected");
-      char subscription[50];
-      strcpy(subscription, mqttchannel);
-      strcat(subscription, "looseblock/+");
-      client.subscribe(subscription, 1); // accept all channel/looseBlock topics
-      strcpy(subscription, mqttchannel);
-      strcat(subscription, "track/sensor/send/BOD/block/+"); // these are ghost buster (zero a block) commands from JMRI
-      client.subscribe(subscription, 1);
-    }
-    else
-    {
-      pinMode(2, OUTPUT);
-      Serial.print("Failed to connect to ");
-      Serial.print(mqttServer);
-      Serial.print(" Response was ");
-      Serial.println(client.state());
-      Serial.println("Looping every 2 seconds. MQTT server must be configured using BT menu");
-      flasher = !flasher;
-      Serial.println(flasher);
-      if (flasher == true)
-        digitalWrite(2, HIGH);
-      else
-        digitalWrite(2, LOW);
+  uint32_t now = millis();
 
-      // Wait 2 seconds before retrying
-      if (BTSerial.available())
-      {
-        flushSerialIn();
-        if (pwCheck())
-          configure();
-        // the device will be rebooted at this point after the operator resets mqtt server
-      }
-      delay(2000);
-    }
+  // Loop until we're reconnected TBD change all Serial to BTSerial (maybe)
+  while (!client.connect(mqtt_node))
+  {
+    pinMode(2, OUTPUT);
+    Serial.print("Failed to connect to ");
+    Serial.print(mqttServer);
+    Serial.print(" Response was ");
+    Serial.println(client.state());
+    Serial.println("Retrying. MQTT server must be configured using BT menu");
+    flasher = !flasher;
+    Serial.println(flasher);
+    if (flasher == true)
+      digitalWrite(2, HIGH);
+    else
+      digitalWrite(2, LOW);
+    // Wait 1 second before retrying
+    delay(1000);
+    if (millis() - now > 5000 && BTSerial.available())
+    // this is not looking good so bail out and let operator set configuration
+    // if BT is not available just keep blinking the blue light
+      break;
   }
+
+  if (BTSerial.available() && !client.connected())
+  {
+    flushSerialIn();
+    if (pwCheck())
+      configure();
+    // the device will be rebooted at this point after the operator resets mqtt server
+  }
+}
+
+/*****************************************************************************/
+void setupSubscriptions()
+{
+  char subscription[50];
+  strcpy(subscription, mqttchannel);
+  strcat(subscription, "looseblock/+");
+  client.subscribe(subscription, 1); // accept all channel/looseBlock topics
+  strcpy(subscription, mqttchannel);
+  strcat(subscription, "track/sensor/send/BOD/block/+"); // these are ghost buster (zero a block) commands from JMRI
+  client.subscribe(subscription, 1);
 }
 
 /*****************************************************************************/
@@ -288,23 +295,24 @@ void loop()
   // this will reset the password to "IGNORE" and turn on Bluetooth
   // use this if Bluetooth has been disabled from the menu (to prevent hackers in the house)
   // or if password was forgotten
-  if (digitalRead(2) == LOW)
+  if (digitalRead(5) == LOW)
   {
     BTSerial.begin(nodeName);
     myPrefs.begin("general", false);
     myPrefs.putBool("BTon", true);
     myPrefs.putString("password", "IGNORE");
     myPrefs.end();
-    configure(); 
+    configure();
   }
 
-  // establish and maintain the mqtt connection
+  // maintain the mqtt connection
   // it will disconnect if we are fiddling with the menu
   if (!client.connected())
   {
-    reconnect();
+    connectMQTT();
+    setupSubscriptions();
   }
-  
+
   client.loop();
 
   // if operator connects via Bluetooth and then enters a blank line we display the configure menu
@@ -348,7 +356,7 @@ void callback(char *topic, byte *message, unsigned int length)
   }
 
   // a block was selected to be zeroed in JMRI
-  if (strcmp(ghostBlockZeroTopic, topicString.substr(0,topicString.find_last_of('/') + 1).c_str()) == 0)
+  if (strcmp(ghostBlockZeroTopic, topicString.substr(0, topicString.find_last_of('/') + 1).c_str()) == 0)
   {
     // find a local block/keeper for this block and zero the block count
     blockID = atoi(topicString.substr(topicString.find_last_of('/') + 1).c_str());
@@ -500,6 +508,8 @@ void showMenu()
   BTSerial.println(" ");
   BTSerial.print("\nBlock Occupancy Detector Main Menu for ");
   BTSerial.println(BTname);
+  BTSerial.print("Firmware version: ");
+  BTSerial.println(version);
   BTSerial.println("\n Enter: ");
   BTSerial.println(" 'P' - Print status");
   BTSerial.println(" 'N' - Set node name");
@@ -564,11 +574,19 @@ void configure()
       BTSerial.print("Local IP address = ");
       BTSerial.println(ipAdr);
       BTSerial.print("SSID = ");
-      BTSerial.println(SSID);
+      BTSerial.print(SSID);
+      if (WiFi.status() == WL_CONNECTED)
+        BTSerial.println(" connected");
+      else
+        BTSerial.println(" not connected");
       BTSerial.print("MQTT server = ");
-      BTSerial.println(mqttServer);
+      BTSerial.print(mqttServer);
+      if (client.connected())
+        BTSerial.println(" connected");
+      else
+        BTSerial.println(" not connected");
       BTSerial.print("MQTT channel = ");
-      BTSerial.println(mqttchannel);
+      BTSerial.println(mqttChannel);
       break;
 
     case 'X': // Bluetooth password
