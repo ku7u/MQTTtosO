@@ -50,8 +50,6 @@ SOFTWARE.
    39  input only, external pullup required
    */
 
-#define version "1.0"
-
 #include <iostream>
 #include <Preferences.h>
 #include <PubSubClient.h>
@@ -61,6 +59,8 @@ SOFTWARE.
 //#define testing
 
 using namespace std;
+
+const char *version = "1.1";
 
 Preferences myPrefs;
 char *deviceSpace[] = {"d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8"};
@@ -262,8 +262,8 @@ void connectMQTT()
     // Wait 1 second before retrying
     delay(1000);
     if (millis() - now > 5000 && BTSerial.available())
-    // this is not looking good so bail out and let operator set configuration
-    // if BT is not available just keep blinking the blue light
+      // this is not looking good so bail out and let operator set configuration
+      // if BT is not available just keep blinking the blue light
       break;
   }
 
@@ -508,8 +508,6 @@ void showMenu()
   BTSerial.println(" ");
   BTSerial.print("\nBlock Occupancy Detector Main Menu for ");
   BTSerial.println(BTname);
-  BTSerial.print("Firmware version: ");
-  BTSerial.println(version);
   BTSerial.println("\n Enter: ");
   BTSerial.println(" 'P' - Print status");
   BTSerial.println(" 'N' - Set node name");
@@ -568,6 +566,8 @@ void configure()
 
     case 'P': // print status
       BTSerial.println("\nCurrent configuration");
+      BTSerial.print("Firmware version: ");
+      BTSerial.println(version);
       BTSerial.print("Node name (MQTT and Bluetooth) = ");
       BTSerial.println(nodeName);
       ipAdr = WiFi.localIP();
