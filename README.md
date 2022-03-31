@@ -8,7 +8,7 @@ This software was developed using VSCode and Arduino avrisp with 'ESP32 Dev Modu
 
 On first start the code will attemp to connect to the default WiFi SSID and will fail. At that point connect the Bluetooth Serial app to the device and enter a blank line. The menu should then display. Using the menu the WiFi SSID and password can be entered. At the same menu enter the MQTT server address. Provide a name for the node both for MQTT and Bluetooth. They can be the same.
 
-A Bluetooth password can be supplied to prevent local hackers from tinkering with the device. However they can still connect. There is a menu choice to turn off Bluetooth completely. To turn it back on ground pin 2 briefly. This also sets the password to the default 'IGNORE' which is in effect no password so the operator must either ignore the threat, set a new password or turn off Bluetooth again.
+A Bluetooth password can be supplied to prevent local hackers from tinkering with the device. However they can still connect. There is a menu choice to turn off Bluetooth completely. To turn it back on ground pin 5 briefly. This also sets the password to the default 'IGNORE' which is in effect no password so the operator must either ignore the threat, set a new password or turn off Bluetooth again.
 
 After configuring the above, reboot the device using the menu.
 
