@@ -28,7 +28,7 @@ SOFTWARE.
    03  RX0
    04  GPIO
    05  ground this pin to restore Bluetooth
-   12  det #1 E 
+   12  det #1 E
    13  det #1 W
    14  det #2 E
    15  det #2 W
@@ -60,7 +60,7 @@ SOFTWARE.
 
 using namespace std;
 
-const char *version = "2.0";
+const char *version = "3.0";
 
 Preferences myPrefs;
 char *deviceSpace[] = {"d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8"};
@@ -139,42 +139,42 @@ bool speedometerEnabled;
 /*****************************************************************************/
 void IRAM_ATTR isr0(void)
 {
-    bod[0].check();
+  bod[0].check();
 }
 
 void IRAM_ATTR isr1(void)
 {
-    bod[1].check();
+  bod[1].check();
 }
 
 void IRAM_ATTR isr2(void)
 {
-    bod[2].check();
+  bod[2].check();
 }
 
 void IRAM_ATTR isr3(void)
 {
-    bod[3].check();
+  bod[3].check();
 }
 
 void IRAM_ATTR isr4(void)
 {
-    bod[4].check();
+  bod[4].check();
 }
 
 void IRAM_ATTR isr5(void)
 {
-    bod[5].check();
+  bod[5].check();
 }
 
 void IRAM_ATTR isr6(void)
 {
-    bod[6].check();
+  bod[6].check();
 }
 
 void IRAM_ATTR isr7(void)
 {
-    bod[7].check();
+  bod[7].check();
 }
 
 /*****************************************************************************/
@@ -245,7 +245,7 @@ void setup()
     myPrefs.end();
   }
 
-// set interrupt service routines for each detector
+  // set interrupt service routines for each detector
   attachInterrupt(12, isr0, CHANGE);
   attachInterrupt(13, isr0, CHANGE);
 
@@ -724,15 +724,25 @@ void configure()
 
     case 'D': // device names
       BTSerial.println("\nAssign system wide unique name for devices, required for speedometer");
-      BTSerial.print("Enter device ID (1 - 8), or blank line to exit:");
-      enteredVal = getNumber(1, 8);
-      BTSerial.print("\nEnter a name for device ");BTSerial.println(enteredVal);
-      myString = BTSerial.readString();
-      myString.trim();
-      myPrefs.begin("devicespace");
-      myPrefs.putString("devicename", myString);
-      myPrefs.end();
-      deviceName[enteredVal] = myString;
+      while (true)
+      {
+        BTSerial.print("Enter device ID (1 - 8), or 0 to quit:");
+        enteredVal = getNumber(0, 8);
+        if (enteredVal == 0)
+          break;
+        BTSerial.print("\nEnter a name for device ");
+        BTSerial.println(enteredVal);
+        enteredVal--;
+        while (!BTSerial.available())
+        {
+        }
+        myString = BTSerial.readString();
+        myString.trim();
+        myPrefs.begin("devicespace");
+        myPrefs.putString("devicename", myString);
+        myPrefs.end();
+        deviceName[enteredVal] = myString;
+      }
       break;
 
     case 'S': // speedometer
@@ -754,8 +764,10 @@ void configure()
       break;
 
     case 'G': // ghostbuster
-      BTSerial.println("\nEnter block ID to be cleared of ghosts (set to zero occupancy), 'Q' to quit");
+      BTSerial.println("\nEnter block ID to be cleared of ghosts (set to zero occupancy), or 0 to quit");
       enteredVal = getNumber(0, 255);
+      if (enteredVal == 0)
+        break;
       if (ghostBuster(enteredVal))
         BTSerial.println("Ghosts removed");
       else
@@ -968,7 +980,7 @@ void wcDetectorConfiguration()
       BTSerial.println(" ");
     }
 
-    BTSerial.print("\n Enter detector number (1 - 8), 'Q' to quit: ");
+    BTSerial.print("\n Enter detector number (1 - 8), 0 to quit: ");
     _detectorNumber = getNumber(0, numDevices);
     if (_detectorNumber <= 0)
       return;
