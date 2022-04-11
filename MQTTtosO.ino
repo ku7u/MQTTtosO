@@ -24,11 +24,11 @@ SOFTWARE.
 
   Pin assignments:
    01  TX0
-   02  switch for configuration via bluetooth
+   02  onboard LED is used to display wheel crossings for setup and t/s
    03  RX0
    04  GPIO
-   05  GPIO
-   12  det #1 E
+   05  ground this pin to restore Bluetooth
+   12  det #1 E 
    13  det #1 W
    14  det #2 E
    15  det #2 W
@@ -60,7 +60,7 @@ SOFTWARE.
 
 using namespace std;
 
-const char *version = "1.1";
+const char *version = "2.0";
 
 Preferences myPrefs;
 char *deviceSpace[] = {"d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8"};
@@ -77,6 +77,8 @@ char blockTopic[100];
 char looseBlockIncreaseTopic[100];
 char looseBlockDecreaseTopic[100];
 char ghostBlockZeroTopic[100];
+char speedTopic[100];
+
 PubSubClient client(espClient);
 
 BluetoothSerial BTSerial;
@@ -89,8 +91,12 @@ String nodeName;
 
 // constants and variables - detectors
 const uint8_t numDevices = 8;
-const byte WEST = 0;
-const byte EAST = 1;
+String deviceName[numDevices];
+enum Direction : uint8_t
+{
+  WEST,
+  EAST
+};
 
 // detector pins
 const uint16_t pinDet1W = 13;
@@ -120,6 +126,57 @@ detector bod[] =
      detector(pinDet7W, pinDet7E),
      detector(pinDet8W, pinDet8E)};
 
+// speedometer
+bool speedometerEnabled;
+
+// /*****************************************************************************/
+// void IRAM_ATTR isr(void)
+// {
+//   for (int i = 0; i < numDevices; i++)
+//     bod[i].check();
+// }
+
+/*****************************************************************************/
+void IRAM_ATTR isr0(void)
+{
+    bod[0].check();
+}
+
+void IRAM_ATTR isr1(void)
+{
+    bod[1].check();
+}
+
+void IRAM_ATTR isr2(void)
+{
+    bod[2].check();
+}
+
+void IRAM_ATTR isr3(void)
+{
+    bod[3].check();
+}
+
+void IRAM_ATTR isr4(void)
+{
+    bod[4].check();
+}
+
+void IRAM_ATTR isr5(void)
+{
+    bod[5].check();
+}
+
+void IRAM_ATTR isr6(void)
+{
+    bod[6].check();
+}
+
+void IRAM_ATTR isr7(void)
+{
+    bod[7].check();
+}
+
 /*****************************************************************************/
 void setup()
 {
@@ -138,10 +195,11 @@ void setup()
   mqttServer = myPrefs.getString("mqttserver", "none");
   mqttChannel = myPrefs.getString("mqttchannel", "trains/");
   strcpy(mqttchannel, mqttChannel.c_str());
-  myPrefs.end();
+  speedometerEnabled = myPrefs.getBool("speedoenabled", false);
+  // myPrefs.end();
 
   // Bluetooth
-  myPrefs.begin("general");
+  // myPrefs.begin("general");
   if (myPrefs.getBool("BTon", true))
     BTSerial.begin(nodeName);
   myPrefs.end();
@@ -171,17 +229,46 @@ void setup()
   strcat(looseBlockDecreaseTopic, "looseblock/decrease");
   strcpy(ghostBlockZeroTopic, mqttchannel);
   strcat(ghostBlockZeroTopic, "track/sensor/send/BOD/block/");
+  strcpy(speedTopic, mqttchannel);
+  // strcat(speedTopic, "track/sensor/speed/block/");
+  strcat(speedTopic, "track/sensor/speed/");
 
   // read the detector parameters from memory and apply to objects
   for (int i = 0; i < numDevices; i++)
   {
     myPrefs.begin(deviceSpace[i], true);
+    deviceName[i] = myPrefs.getString("devicename", "noname" + String(i));
     bod[i].setBlockWest(myPrefs.getUShort("blockWest", 0)); // TBD the types
     bod[i].setBlockEast(myPrefs.getUShort("blockEast", 0));
     bod[i].setWestKeeper(myPrefs.getBool("westkeeper", false));
     bod[i].setEastKeeper(myPrefs.getBool("eastkeeper", false));
     myPrefs.end();
   }
+
+// set interrupt service routines for each detector
+  attachInterrupt(12, isr0, CHANGE);
+  attachInterrupt(13, isr0, CHANGE);
+
+  attachInterrupt(14, isr1, CHANGE);
+  attachInterrupt(15, isr1, CHANGE);
+
+  attachInterrupt(16, isr2, CHANGE);
+  attachInterrupt(17, isr2, CHANGE);
+
+  attachInterrupt(18, isr3, CHANGE);
+  attachInterrupt(19, isr3, CHANGE);
+
+  attachInterrupt(21, isr4, CHANGE);
+  attachInterrupt(22, isr4, CHANGE);
+
+  attachInterrupt(23, isr5, CHANGE);
+  attachInterrupt(25, isr5, CHANGE);
+
+  attachInterrupt(26, isr6, CHANGE);
+  attachInterrupt(27, isr6, CHANGE);
+
+  attachInterrupt(32, isr7, CHANGE);
+  attachInterrupt(33, isr7, CHANGE);
 }
 
 /*****************************************************************************/
@@ -267,6 +354,8 @@ void connectMQTT()
       break;
   }
 
+  pinMode(2, INPUT_PULLUP);
+
   if (BTSerial.available() && !client.connected())
   {
     flushSerialIn();
@@ -292,6 +381,8 @@ void setupSubscriptions()
 // just do this over and over and over and...
 void loop()
 {
+  static uint32_t speedoTimer;
+
   // this will reset the password to "IGNORE" and turn on Bluetooth
   // use this if Bluetooth has been disabled from the menu (to prevent hackers in the house)
   // or if password was forgotten
@@ -313,6 +404,7 @@ void loop()
     setupSubscriptions();
   }
 
+  // respond to any incoming messages which will then trigger callback routine
   client.loop();
 
   // if operator connects via Bluetooth and then enters a blank line we display the configure menu
@@ -325,6 +417,16 @@ void loop()
 
   // this is the meat and the potatoes for BOD
   checkDetectors();
+
+  // check speedometer once per second
+  if (speedometerEnabled)
+  {
+    if (millis() - speedoTimer > 1000)
+    {
+      checkSpeedometer();
+      speedoTimer = millis();
+    }
+  }
 }
 
 /*****************************************************************************/
@@ -374,10 +476,10 @@ void checkDetectors()
   uint8_t _buf[8];
   bool _result;
 
-  // for (int i = 0; i < 1; i++) // TBD remove this
   for (int i = 0; i < numDevices; i++)
   {
-    if (bod[i].check())
+    if (bod[i].detected())
+    // if (bod[i].check())
     {
       // look for block on destination side which will be increased
       if (bod[i].direction() == WEST)
@@ -437,8 +539,8 @@ bool procDetectors(byte blockID, bool increase)
         if (increase)
         {
           bod[i].westCount++;
-          BTSerial.print("westcount ");
-          BTSerial.println(bod[i].westCount);
+          // BTSerial.print("westcount ");
+          // BTSerial.println(bod[i].westCount);
           if (bod[i].westCount == 1) // went from zero to one so notify JMRI this block now occupied
           {
             // send a message to JMRI
@@ -451,8 +553,8 @@ bool procDetectors(byte blockID, bool increase)
           if (bod[i].westCount > 0)
           {
             bod[i].westCount--;
-            BTSerial.print("westcount ");
-            BTSerial.println(bod[i].westCount);
+            // BTSerial.print("westcount ");
+            // BTSerial.println(bod[i].westCount);
             if (bod[i].westCount == 0) // went from one to zero so notify JMRI this block now unoccupied
             {
               // send a message to JMRI
@@ -471,8 +573,8 @@ bool procDetectors(byte blockID, bool increase)
         if (increase)
         {
           bod[i].eastCount++;
-          BTSerial.print("eastcount ");
-          BTSerial.println(bod[i].eastCount);
+          // BTSerial.print("eastcount ");
+          // BTSerial.println(bod[i].eastCount);
           if (bod[i].eastCount == 1)
           {
             client.publish(localTopic, "ACTIVE");
@@ -484,8 +586,8 @@ bool procDetectors(byte blockID, bool increase)
           if (bod[i].eastCount > 0)
           {
             bod[i].eastCount--;
-            BTSerial.print("eastcount ");
-            BTSerial.println(bod[i].eastCount);
+            // BTSerial.print("eastcount ");
+            // BTSerial.println(bod[i].eastCount);
             if (bod[i].eastCount == 0)
             {
               // send a message to JMRI
@@ -502,6 +604,69 @@ bool procDetectors(byte blockID, bool increase)
 }
 
 /*****************************************************************************/
+bool checkSpeedometer()
+{
+  static uint32_t interval[numDevices] = {999};
+  uint32_t wheelInterval;
+  uint32_t result;
+  uint8_t _result;
+  uint16_t blockID;
+  char localTopic[100];
+  char numstr[4];
+
+  for (int i = 0; i < numDevices; i++)
+  {
+    wheelInterval = bod[i].getInterval();
+    // if (i == 0)
+    // {
+    //   BTSerial.print("wheel interval ");
+    //   BTSerial.println(wheelInterval);
+    // }
+    if ((wheelInterval != interval[i]))
+    {
+      interval[i] = wheelInterval;
+      // get direction of travel and block being entered
+      if (bod[i].direction() == WEST)
+      {
+        blockID = bod[i].getBlockWest();
+        // calculate mph
+        if (wheelInterval == 0)
+          result = 0;
+        else
+          // result = (195000 * 2) / wheelInterval; // 195 is conversion factor from mm/ms to smph/hr, sensors are 4mm apart
+          result = (150000) / wheelInterval; // 195 is conversion factor from mm/ms to smph/hr, sensors are 4mm apart
+      }
+      else
+      {
+        blockID = bod[i].getBlockEast();
+        // calculate mph
+        if (wheelInterval == 0)
+          result = 0;
+        else
+          // result = (195000 * 2) / wheelInterval; // 195 is conversion factor from mm/ms to smph/hr, sensors are 4mm apart, 5 is a trial
+          result = (150000) / wheelInterval; // 195 is conversion factor from mm/ms to smph/hr, sensors are 4mm apart, 5 is a trial
+      }
+
+      // sprintf(numstr, "%d", blockID);
+      // strcpy(localTopic, speedTopic);
+      // strcat(localTopic, numstr);
+
+      strcpy(localTopic, speedTopic);
+      strcat(localTopic, deviceName[i].c_str());
+      if (bod[i].direction() == WEST)
+        strcat(localTopic, "/west");
+      else
+        strcat(localTopic, "/east");
+
+      // send result
+      _result = (uint8_t)result;
+      client.publish(localTopic, &_result, 1);
+      // BTSerial.print("result "); BTSerial.println(_result);
+    }
+  }
+}
+
+/*****************************************************************************/
 // displays the menu for user interaction for configuration or testing
 void showMenu()
 {
@@ -510,16 +675,18 @@ void showMenu()
   BTSerial.println(BTname);
   BTSerial.println("\n Enter: ");
   BTSerial.println(" 'P' - Print status");
-  BTSerial.println(" 'N' - Set node name");
-  BTSerial.println(" 'X' - Set Bluetooth password");
-  BTSerial.println(" 'W' - Set WiFi credentials");
-  BTSerial.println(" 'M' - Set MQTT server IP address");
-  BTSerial.println(" 'C' - Set MQTT channel");
-  BTSerial.println(" 'I' - Set block IDs and keeper status");
+  BTSerial.println(" 'N' - Node name");
+  BTSerial.println(" 'B' - Bluetooth password");
+  BTSerial.println(" 'W' - WiFi credentials");
+  BTSerial.println(" 'M' - MQTT server IP address");
+  BTSerial.println(" 'C' - MQTT channel");
+  BTSerial.println(" 'I' - Block IDs and keeper status");
+  BTSerial.println(" 'D' - Device names");
+  BTSerial.println(" 'S' - Speedometer configuration");
   BTSerial.println(" 'G' - Ghostbuster");
-  BTSerial.println(" 'Z' - Turn off Bluetooth (resume by grounding pin 2)");
-  // BTSerial.println(" 'D' - Debug display on/off");
-  BTSerial.println(" 'B' - Restart machine");
+  BTSerial.println(" 'Z' - Turn off Bluetooth (resume by grounding pin 5)");
+  // BTSerial.println(" 'X' - Debug display on/off");
+  BTSerial.println(" 'Y' - Restart machine");
 
   BTSerial.println("\n Enter 'R' to return to run mode (automatic after 30 sec of inactivity)");
 }
@@ -553,6 +720,37 @@ void configure()
     {
     case 'I': // block IDs
       wcDetectorConfiguration();
+      break;
+
+    case 'D': // device names
+      BTSerial.println("\nAssign system wide unique name for devices, required for speedometer");
+      BTSerial.print("Enter device ID (1 - 8), or blank line to exit:");
+      enteredVal = getNumber(1, 8);
+      BTSerial.print("\nEnter a name for device ");BTSerial.println(enteredVal);
+      myString = BTSerial.readString();
+      myString.trim();
+      myPrefs.begin("devicespace");
+      myPrefs.putString("devicename", myString);
+      myPrefs.end();
+      deviceName[enteredVal] = myString;
+      break;
+
+    case 'S': // speedometer
+      BTSerial.println("\nEnter 'Y' to enable speedometer, 'N' to disable");
+      if (getUpperChar(millis()) != 'Y')
+      {
+        speedometerEnabled = false;
+        myPrefs.begin("general", false);
+        myPrefs.putBool("speedoenabled", speedometerEnabled);
+        myPrefs.end();
+      }
+      else
+      {
+        speedometerEnabled = true;
+        myPrefs.begin("general", false);
+        myPrefs.putBool("speedoenabled", speedometerEnabled);
+        myPrefs.end();
+      }
       break;
 
     case 'G': // ghostbuster
@@ -589,7 +787,7 @@ void configure()
       BTSerial.println(mqttChannel);
       break;
 
-    case 'X': // Bluetooth password
+    case 'B': // Bluetooth password
       BTSerial.print("\nEnter password: ");
       while (!BTSerial.available())
       {
@@ -656,7 +854,7 @@ void configure()
       BTSerial.disconnect();
       break;
 
-    case 'D': // debug
+    case 'X': // debug
       BTSerial.println("Turn debug display on ('Y') or off ('N') ");
       myChar = getUpperChar(30000);
       BTSerial.println("Which detector (1-8)?");
@@ -669,7 +867,7 @@ void configure()
       // BTSerial.disconnect();
       return;
 
-    case 'B': // reboot
+    case 'Y': // reboot
       BTSerial.println("\nDevice will now be rebooted...");
       delay(3000);
       ESP.restart();

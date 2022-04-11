@@ -38,9 +38,12 @@ public:
     void setDisplayDetect(bool displayOn);
     uint8_t getBlockWest();
     uint8_t getBlockEast();
+    uint32_t getInterval();
+    void zeroWheelInterval();
     bool check();
     bool detected();
     uint8_t direction();
+    bool inProcess();
     uint16_t westCount;
     uint16_t eastCount;
     bool westKeeper;
@@ -49,6 +52,8 @@ public:
 
 /*****************************************************************************/
 private:
+    uint32_t wheelInterval;
+    uint32_t trippedTime;
     uint8_t _detectorPinWest;
     uint8_t _detectorPinEast;
     uint8_t _blockWest;
@@ -56,12 +61,15 @@ private:
     uint8_t _testByte;
     uint8_t _flagBits;
     bool _detected;
+    bool _endLocked;
+    bool _triplocked;
     enum Direction : uint8_t
     {
         WEST,
         EAST
     }; 
     Direction _direction;
+    uint32_t _keepAlive;
 
 };
 
