@@ -60,7 +60,7 @@ SOFTWARE.
 
 using namespace std;
 
-const char *version = "3.0";
+const char *version = "4.0";
 
 Preferences myPrefs;
 char *deviceSpace[] = {"d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8"};
@@ -72,6 +72,7 @@ String wifiPassword;
 String mqttServer;
 String mqttNode;
 String mqttChannel;
+String topicLeftEnd;
 char mqttchannel[50];
 char blockTopic[100];
 char looseBlockIncreaseTopic[100];
@@ -194,6 +195,7 @@ void setup()
   wifiPassword = myPrefs.getString("wifipassword", "none");
   mqttServer = myPrefs.getString("mqttserver", "none");
   mqttChannel = myPrefs.getString("mqttchannel", "trains/");
+  topicLeftEnd = myPrefs.getString("topicleftend", "trains/track/sensor/");
   strcpy(mqttchannel, mqttChannel.c_str());
   speedometerEnabled = myPrefs.getBool("speedoenabled", false);
   // myPrefs.end();
@@ -221,17 +223,20 @@ void setup()
   setupSubscriptions(); // also must be called on a reconnect
 
   // define topics
-  strcpy(blockTopic, mqttchannel);
-  strcat(blockTopic, "track/sensor/BOD/block/");
-  strcpy(looseBlockIncreaseTopic, mqttchannel);
+  strcpy(blockTopic, topicLeftEnd.c_str());
+  strcat(blockTopic, "BOD/block/");
+  // strcpy(looseBlockIncreaseTopic, mqttchannel);
+  strcpy(looseBlockIncreaseTopic, topicLeftEnd.c_str());
   strcat(looseBlockIncreaseTopic, "looseblock/increase");
-  strcpy(looseBlockDecreaseTopic, mqttchannel);
+  // strcpy(looseBlockDecreaseTopic, mqttchannel);
+  strcpy(looseBlockDecreaseTopic, topicLeftEnd.c_str());
   strcat(looseBlockDecreaseTopic, "looseblock/decrease");
-  strcpy(ghostBlockZeroTopic, mqttchannel);
-  strcat(ghostBlockZeroTopic, "track/sensor/send/BOD/block/");
-  strcpy(speedTopic, mqttchannel);
-  // strcat(speedTopic, "track/sensor/speed/block/");
-  strcat(speedTopic, "track/sensor/speed/");
+  // strcpy(ghostBlockZeroTopic, mqttchannel);
+  strcpy(ghostBlockZeroTopic, topicLeftEnd.c_str());
+  strcat(ghostBlockZeroTopic, "send/BOD/block/");
+  // strcpy(speedTopic, mqttchannel);
+  strcpy(speedTopic, topicLeftEnd.c_str());
+  strcat(speedTopic, "speed/");
 
   // read the detector parameters from memory and apply to objects
   for (int i = 0; i < numDevices; i++)
@@ -478,8 +483,8 @@ void checkDetectors()
 
   for (int i = 0; i < numDevices; i++)
   {
-    if (bod[i].detected())
-    // if (bod[i].check())
+    if (bod[i].detected()) // if using interrupts
+    // if (bod[i].check()) // when not using interrupts
     {
       // look for block on destination side which will be increased
       if (bod[i].direction() == WEST)
@@ -492,7 +497,7 @@ void checkDetectors()
       {
         // send message to colleagues, JMRI does not see these looseBlock messages
         client.publish(looseBlockIncreaseTopic, &_blockID, 1);
-        printMsg("unkept block increased notice sent");
+        // printMsg("unkept block increased notice sent");
       }
 
       // look for block on source side which will be decreased
@@ -506,7 +511,7 @@ void checkDetectors()
       {
         // send message to colleagues, JMRI does not see these looseBlock messages
         client.publish(looseBlockDecreaseTopic, &_blockID, 1);
-        printMsg("unkept block decreased notice sent");
+        // printMsg("unkept block decreased notice sent");
       }
     }
   }
@@ -545,7 +550,7 @@ bool procDetectors(byte blockID, bool increase)
           {
             // send a message to JMRI
             client.publish(localTopic, "ACTIVE");
-            printMsg("Send to JMRI - WEST occupied");
+            // printMsg("Send to JMRI - WEST occupied");
           }
         }
         else
@@ -559,7 +564,7 @@ bool procDetectors(byte blockID, bool increase)
             {
               // send a message to JMRI
               client.publish(localTopic, "INACTIVE");
-              printMsg("Send to JMRI - WEST vacant");
+              // printMsg("Send to JMRI - WEST vacant");
             }
           }
         }
@@ -578,7 +583,7 @@ bool procDetectors(byte blockID, bool increase)
           if (bod[i].eastCount == 1)
           {
             client.publish(localTopic, "ACTIVE");
-            printMsg("Send to JMRI - EAST occupied");
+            // printMsg("Send to JMRI - EAST occupied");
           }
         }
         else
@@ -592,7 +597,7 @@ bool procDetectors(byte blockID, bool increase)
             {
               // send a message to JMRI
               client.publish(localTopic, "INACTIVE");
-              printMsg("Send to JMRI - EAST vacant");
+              // printMsg("Send to JMRI - EAST vacant");
             }
           }
         }
@@ -679,16 +684,16 @@ void showMenu()
   BTSerial.println(" 'B' - Bluetooth password");
   BTSerial.println(" 'W' - WiFi credentials");
   BTSerial.println(" 'M' - MQTT server IP address");
-  BTSerial.println(" 'C' - MQTT channel");
+  BTSerial.println(" 'T' - Topic definition");
   BTSerial.println(" 'I' - Block IDs and keeper status");
   BTSerial.println(" 'D' - Device names");
   BTSerial.println(" 'S' - Speedometer configuration");
   BTSerial.println(" 'G' - Ghostbuster");
-  BTSerial.println(" 'Z' - Turn off Bluetooth (resume by grounding pin 5)");
+  BTSerial.println(" 'Z' - Turn off Bluetooth (ground pin 5 to resume)");
   // BTSerial.println(" 'X' - Debug display on/off");
   BTSerial.println(" 'Y' - Restart machine");
 
-  BTSerial.println("\n Enter 'R' to return to run mode (automatic after 30 sec of inactivity)");
+  BTSerial.println("\nEnter 'Q' to return to run mode (30 sec timeout)");
 }
 
 /*****************************************************************************/
@@ -714,7 +719,7 @@ void configure()
       beenHereDoneThat = true;
     }
     else
-      BTSerial.println("\nEnter empty line to show menu again");
+      BTSerial.println("\nEnter empty line to show menu again, 'Q' to quit");
 
     switch (getUpperChar(millis()))
     {
@@ -726,7 +731,7 @@ void configure()
       BTSerial.println("\nAssign system wide unique name for devices, required for speedometer");
       while (true)
       {
-        BTSerial.print("Enter device ID (1 - 8), or 0 to quit:");
+        BTSerial.print("Enter device ID (1 - 8), blank line to quit:");
         enteredVal = getNumber(0, 8);
         if (enteredVal == 0)
           break;
@@ -738,7 +743,7 @@ void configure()
         }
         myString = BTSerial.readString();
         myString.trim();
-        myPrefs.begin("devicespace");
+        myPrefs.begin(deviceSpace[enteredVal]);
         myPrefs.putString("devicename", myString);
         myPrefs.end();
         deviceName[enteredVal] = myString;
@@ -764,7 +769,7 @@ void configure()
       break;
 
     case 'G': // ghostbuster
-      BTSerial.println("\nEnter block ID to be cleared of ghosts (set to zero occupancy), or 0 to quit");
+      BTSerial.println("\nEnter block ID to be cleared of ghosts (set to zero occupancy), blank line to quit");
       enteredVal = getNumber(0, 255);
       if (enteredVal == 0)
         break;
@@ -822,10 +827,10 @@ void configure()
       setMQTT();
       break;
 
-    case 'C': // set mqtt channel
-      BTSerial.print("\nCurrent MQTT channel: ");
-      BTSerial.println(mqttchannel);
-      BTSerial.print("Enter new MQTT channel or blank line to exit: ");
+    case 'T': // set topic left end
+      BTSerial.print("\nCurrent topic header: ");
+      BTSerial.println(topicLeftEnd);
+      BTSerial.println("\nEnter new topic header or blank line to exit: ");
       while (!BTSerial.available())
       {
       }
@@ -834,12 +839,31 @@ void configure()
       if (myString.length() == 0)
         break;
       myPrefs.begin("general", false);
-      myPrefs.putString("mqttchannel", myString);
+      myPrefs.putString("topicleftend", myString);
       myPrefs.end();
       BTSerial.print("\nChanged to ");
       BTSerial.println(myString);
       BTSerial.println("\nReboot is required");
       break;
+
+    // case 'C': // set mqtt channel
+    //   BTSerial.print("\nCurrent MQTT channel: ");
+    //   BTSerial.println(mqttchannel);
+    //   BTSerial.print("Enter new MQTT channel or blank line to exit: ");
+    //   while (!BTSerial.available())
+    //   {
+    //   }
+    //   myString = BTSerial.readString();
+    //   myString.trim();
+    //   if (myString.length() == 0)
+    //     break;
+    //   myPrefs.begin("general", false);
+    //   myPrefs.putString("mqttchannel", myString);
+    //   myPrefs.end();
+    //   BTSerial.print("\nChanged to ");
+    //   BTSerial.println(myString);
+    //   BTSerial.println("\nReboot is required");
+    //   break;
 
     case 'N': // node name
       BTSerial.println("Enter a name for this node or blank to exit. Used by MQTT, must be unique: ");
@@ -874,7 +898,7 @@ void configure()
       bod[devID - 1].setDisplayDetect(myChar == 'Y');
       break;
 
-    case 'R': // return
+    case 'Q': // return
       BTSerial.println("\nBack to run mode");
       // BTSerial.disconnect();
       return;
