@@ -60,7 +60,7 @@ SOFTWARE.
 
 using namespace std;
 
-const char *version = "4.0";
+const char *version = "5.0";
 
 Preferences myPrefs;
 char *deviceSpace[] = {"d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8"};
@@ -130,12 +130,6 @@ detector bod[] =
 // speedometer
 bool speedometerEnabled;
 
-// /*****************************************************************************/
-// void IRAM_ATTR isr(void)
-// {
-//   for (int i = 0; i < numDevices; i++)
-//     bod[i].check();
-// }
 
 /*****************************************************************************/
 void IRAM_ATTR isr0(void)
@@ -198,10 +192,8 @@ void setup()
   topicLeftEnd = myPrefs.getString("topicleftend", "trains/track/sensor/");
   strcpy(mqttchannel, mqttChannel.c_str());
   speedometerEnabled = myPrefs.getBool("speedoenabled", false);
-  // myPrefs.end();
 
   // Bluetooth
-  // myPrefs.begin("general");
   if (myPrefs.getBool("BTon", true))
     BTSerial.begin(nodeName);
   myPrefs.end();
@@ -225,16 +217,12 @@ void setup()
   // define topics
   strcpy(blockTopic, topicLeftEnd.c_str());
   strcat(blockTopic, "BOD/block/");
-  // strcpy(looseBlockIncreaseTopic, mqttchannel);
   strcpy(looseBlockIncreaseTopic, topicLeftEnd.c_str());
   strcat(looseBlockIncreaseTopic, "looseblock/increase");
-  // strcpy(looseBlockDecreaseTopic, mqttchannel);
   strcpy(looseBlockDecreaseTopic, topicLeftEnd.c_str());
   strcat(looseBlockDecreaseTopic, "looseblock/decrease");
-  // strcpy(ghostBlockZeroTopic, mqttchannel);
   strcpy(ghostBlockZeroTopic, topicLeftEnd.c_str());
   strcat(ghostBlockZeroTopic, "send/BOD/block/");
-  // strcpy(speedTopic, mqttchannel);
   strcpy(speedTopic, topicLeftEnd.c_str());
   strcat(speedTopic, "speed/");
 
@@ -366,7 +354,7 @@ void connectMQTT()
     flushSerialIn();
     if (pwCheck())
       configure();
-    // the device will be rebooted at this point after the operator resets mqtt server
+    // the device must be rebooted at this point after the operator resets mqtt server
   }
 }
 
@@ -639,7 +627,7 @@ bool checkSpeedometer()
           result = 0;
         else
           // result = (195000 * 2) / wheelInterval; // 195 is conversion factor from mm/ms to smph/hr, sensors are 4mm apart
-          result = (150000) / wheelInterval; // 195 is conversion factor from mm/ms to smph/hr, sensors are 4mm apart
+          result = (150000) / wheelInterval; // 150000 is conversion factor from mm/ms to smph/hr, requires calibration TBD
       }
       else
       {
@@ -651,10 +639,6 @@ bool checkSpeedometer()
           // result = (195000 * 2) / wheelInterval; // 195 is conversion factor from mm/ms to smph/hr, sensors are 4mm apart, 5 is a trial
           result = (150000) / wheelInterval; // 195 is conversion factor from mm/ms to smph/hr, sensors are 4mm apart, 5 is a trial
       }
-
-      // sprintf(numstr, "%d", blockID);
-      // strcpy(localTopic, speedTopic);
-      // strcat(localTopic, numstr);
 
       strcpy(localTopic, speedTopic);
       strcat(localTopic, deviceName[i].c_str());
@@ -800,8 +784,10 @@ void configure()
         BTSerial.println(" connected");
       else
         BTSerial.println(" not connected");
-      BTSerial.print("MQTT channel = ");
-      BTSerial.println(mqttChannel);
+      BTSerial.print("MQTT topic header = ");
+      BTSerial.println(topicLeftEnd);
+      printDeviceNames();
+      printDetectorConfiguration();
       break;
 
     case 'B': // Bluetooth password
@@ -845,25 +831,6 @@ void configure()
       BTSerial.println(myString);
       BTSerial.println("\nReboot is required");
       break;
-
-    // case 'C': // set mqtt channel
-    //   BTSerial.print("\nCurrent MQTT channel: ");
-    //   BTSerial.println(mqttchannel);
-    //   BTSerial.print("Enter new MQTT channel or blank line to exit: ");
-    //   while (!BTSerial.available())
-    //   {
-    //   }
-    //   myString = BTSerial.readString();
-    //   myString.trim();
-    //   if (myString.length() == 0)
-    //     break;
-    //   myPrefs.begin("general", false);
-    //   myPrefs.putString("mqttchannel", myString);
-    //   myPrefs.end();
-    //   BTSerial.print("\nChanged to ");
-    //   BTSerial.println(myString);
-    //   BTSerial.println("\nReboot is required");
-    //   break;
 
     case 'N': // node name
       BTSerial.println("Enter a name for this node or blank to exit. Used by MQTT, must be unique: ");
@@ -970,6 +937,43 @@ void setMQTT()
 }
 
 /*****************************************************************************/
+void printDeviceNames()
+{
+  BTSerial.println("\nDevice names");
+  for (int i = 0; i < numDevices; i++)
+  {
+    BTSerial.print("Device ");
+    BTSerial.print(i);
+    BTSerial.print(" ");
+    BTSerial.println(deviceName[i]);
+  }
+}
+
+/*****************************************************************************/
+void printDetectorConfiguration()
+{
+  BTSerial.println("\nDetector configuration");
+  for (int i = 0; i < numDevices; i++)
+  {
+    BTSerial.print("D=");
+    BTSerial.print(i + 1);
+    BTSerial.print(" West block ID=");
+    BTSerial.print(bod[i].getBlockWest());
+    BTSerial.print(" ");
+    if (bod[i].westKeeper)
+      BTSerial.print("K ");
+    else
+      BTSerial.print("  ");
+    BTSerial.print(" East block ID=");
+    BTSerial.print(bod[i].getBlockEast());
+    BTSerial.print(" ");
+    if (bod[i].eastKeeper)
+      BTSerial.print("K ");
+    BTSerial.println(" ");
+  }
+}
+
+/*****************************************************************************/
 // assign block IDs and keeper status
 void wcDetectorConfiguration()
 {
@@ -984,25 +988,7 @@ void wcDetectorConfiguration()
   BTSerial.println("\nDetector configuration menu");
   while (true)
   {
-    BTSerial.println(" Current values...");
-    for (int i = 0; i < numDevices; i++)
-    {
-      BTSerial.print("D=");
-      BTSerial.print(i + 1);
-      BTSerial.print(" West block ID=");
-      BTSerial.print(bod[i].getBlockWest());
-      BTSerial.print(" ");
-      if (bod[i].westKeeper)
-        BTSerial.print("K ");
-      else
-        BTSerial.print("  ");
-      BTSerial.print(" East block ID=");
-      BTSerial.print(bod[i].getBlockEast());
-      BTSerial.print(" ");
-      if (bod[i].eastKeeper)
-        BTSerial.print("K ");
-      BTSerial.println(" ");
-    }
+    printDetectorConfiguration();
 
     BTSerial.print("\n Enter detector number (1 - 8), 0 to quit: ");
     _detectorNumber = getNumber(0, numDevices);
@@ -1103,7 +1089,7 @@ bool ghostBuster(uint8_t blockID)
 }
 
 /*****************************************************************************/
-// returns upper case character
+// returns upper case character, times out after invokeTime
 char getUpperChar(uint32_t invokeTime)
 {
   // gets one character and converts to upper case, clears input buffer of C/R and newline
@@ -1114,7 +1100,7 @@ char getUpperChar(uint32_t invokeTime)
     if (invokeTime > 0)
     {
       if (timeout(invokeTime))
-        return 'R'; // operator dozed off
+        return 'Q'; // operator dozed off
     }
 
     if (BTSerial.available() > 0)
