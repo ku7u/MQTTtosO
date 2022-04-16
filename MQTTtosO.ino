@@ -56,14 +56,15 @@ SOFTWARE.
 #include "WiFi.h"
 #include <BluetoothSerial.h>
 #include "bod.h"
-//#define testing
 
 using namespace std;
 
-const char *version = "5.0";
+const char *version = "6.0";
+
+bool showDebug = false;
 
 Preferences myPrefs;
-char *deviceSpace[] = {"d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8"};
+const char *deviceSpace[] = {"d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8"};
 
 WiFiClient espClient;
 String SSID;
@@ -75,8 +76,9 @@ String mqttChannel;
 String topicLeftEnd;
 char mqttchannel[50];
 char blockTopic[100];
-char looseBlockIncreaseTopic[100];
-char looseBlockDecreaseTopic[100];
+char keeperQueryIncreaseTopic[100];
+char keeperQueryDecreaseTopic[100];
+char keeperQueryTopic[100];
 char ghostBlockZeroTopic[100];
 char speedTopic[100];
 
@@ -130,7 +132,6 @@ detector bod[] =
 // speedometer
 bool speedometerEnabled;
 
-
 /*****************************************************************************/
 void IRAM_ATTR isr0(void)
 {
@@ -177,7 +178,7 @@ void setup()
 {
   byte myVal;
 
-  Serial.begin(115200);     // TBD leave this?
+  Serial.begin(115200);     // TBD leave this? displays system upsets
   pinMode(5, INPUT_PULLUP); // this is used for restoring Bluetooth if turned off from menu
 
   // get the stored configuration values, defaults are the second parameter in the list
@@ -217,10 +218,15 @@ void setup()
   // define topics
   strcpy(blockTopic, topicLeftEnd.c_str());
   strcat(blockTopic, "BOD/block/");
-  strcpy(looseBlockIncreaseTopic, topicLeftEnd.c_str());
-  strcat(looseBlockIncreaseTopic, "looseblock/increase");
-  strcpy(looseBlockDecreaseTopic, topicLeftEnd.c_str());
-  strcat(looseBlockDecreaseTopic, "looseblock/decrease");
+  // strcpy(keeperQueryIncreaseTopic, topicLeftEnd.c_str());
+  // strcat(keeperQueryIncreaseTopic, "looseblock/increase");
+  // strcat(keeperQueryIncreaseTopic, "keeperquery/increase");
+  // strcpy(keeperQueryDecreaseTopic, topicLeftEnd.c_str());
+  // strcat(keeperQueryDecreaseTopic, "looseblock/decrease");
+  // strcat(keeperQueryDecreaseTopic, "keeperquery/decrease");
+  strcpy(keeperQueryTopic, topicLeftEnd.c_str());
+  strcat(keeperQueryTopic, "keeperquery/");
+
   strcpy(ghostBlockZeroTopic, topicLeftEnd.c_str());
   strcat(ghostBlockZeroTopic, "send/BOD/block/");
   strcpy(speedTopic, topicLeftEnd.c_str());
@@ -362,11 +368,15 @@ void connectMQTT()
 void setupSubscriptions()
 {
   char subscription[50];
-  strcpy(subscription, mqttchannel);
-  strcat(subscription, "looseblock/+");
+  // strcpy(subscription, mqttchannel);
+  // strcat(subscription, "looseblock/+");
+  strcpy(subscription, topicLeftEnd.c_str());
+  strcat(subscription, "keeperquery/+");
   client.subscribe(subscription, 1); // accept all channel/looseBlock topics
-  strcpy(subscription, mqttchannel);
-  strcat(subscription, "track/sensor/send/BOD/block/+"); // these are ghost buster (zero a block) commands from JMRI
+  // strcpy(subscription, mqttchannel);
+  // strcat(subscription, "track/sensor/send/BOD/block/+"); // these are ghost buster (zero a block) commands from JMRI
+  strcpy(subscription, topicLeftEnd.c_str());
+  strcat(subscription, "send/BOD/block/+");
   client.subscribe(subscription, 1);
 }
 
@@ -428,25 +438,25 @@ void callback(char *topic, byte *message, unsigned int length)
 {
   uint8_t blockID;
   string topicString;
+  char messChars[50];
 
-  blockID = message[0];
+  // blockID = message[0];
   topicString = string(topic);
 
-  // another detector could not handle a changed block since it was not its brother's keeper
-  if (strcmp(looseBlockIncreaseTopic, topic) == 0)
-  {
-    // call processDetectors with the blockID and increase
-    // currently this node will process its own message which is unnecessary
-    procDetectors((byte)blockID, true);
-    return;
-  }
+  for (int i = 0; i < length; i++)
+    messChars[i] = (char)message[i];
+  messChars[length] = '\0';
 
   // another detector could not handle a changed block since it was not its brother's keeper
-  if (strcmp(looseBlockDecreaseTopic, topic) == 0)
+  if (strcmp(keeperQueryTopic, topicString.substr(0, topicString.find_last_of('/') + 1).c_str()) == 0)
   {
-    // call processDetectors with the blockID and decrease
-    // currently this node will process its own message which is unnecessary
-    procDetectors((byte)blockID, false);
+    blockID = atoi(topicString.substr(topicString.find_last_of('/') + 1).c_str());
+    // call processDetectors with the blockID and increase
+    // currently this node will process its own message which is unnecessary but probably not harmful
+    if (strcmp(messChars, "INCREASE") == 0)
+      procDetectors((byte)blockID, true);
+    else if (strcmp(messChars, "DECREASE") == 0)
+      procDetectors((byte)blockID, false);
     return;
   }
 
@@ -468,6 +478,8 @@ void checkDetectors()
   uint8_t _blockID;
   uint8_t _buf[8];
   bool _result;
+  char numstr[4];
+  char localTopic[100];
 
   for (int i = 0; i < numDevices; i++)
   {
@@ -483,9 +495,13 @@ void checkDetectors()
 
       if ((!_result) && (_blockID > 0))
       {
+        sprintf(numstr, "%d", _blockID);
+        strcpy(localTopic, keeperQueryTopic);
+        strcat(localTopic, numstr);
         // send message to colleagues, JMRI does not see these looseBlock messages
-        client.publish(looseBlockIncreaseTopic, &_blockID, 1);
-        // printMsg("unkept block increased notice sent");
+        // client.publish(keeperQueryIncreaseTopic, &_blockID, 1);
+        client.publish(localTopic, "INCREASE", 1);
+        if (showDebug) printMsg("unkept block increased notice sent");
       }
 
       // look for block on source side which will be decreased
@@ -497,9 +513,13 @@ void checkDetectors()
 
       if ((!_result) && (_blockID > 0))
       {
+        sprintf(numstr, "%d", _blockID);
+        strcpy(localTopic, keeperQueryTopic);
+        strcat(localTopic, numstr);
         // send message to colleagues, JMRI does not see these looseBlock messages
-        client.publish(looseBlockDecreaseTopic, &_blockID, 1);
-        // printMsg("unkept block decreased notice sent");
+        // client.publish(keeperQueryDecreaseTopic, &_blockID, 1);
+        client.publish(localTopic, "DECREASE", 1);
+        if (showDebug) printMsg("unkept block decreased notice sent");
       }
     }
   }
@@ -532,13 +552,17 @@ bool procDetectors(byte blockID, bool increase)
         if (increase)
         {
           bod[i].westCount++;
-          // BTSerial.print("westcount ");
-          // BTSerial.println(bod[i].westCount);
+          if (showDebug)
+          {
+            BTSerial.print("westcount ");
+            BTSerial.println(bod[i].westCount);
+          }
           if (bod[i].westCount == 1) // went from zero to one so notify JMRI this block now occupied
           {
             // send a message to JMRI
             client.publish(localTopic, "ACTIVE");
-            // printMsg("Send to JMRI - WEST occupied");
+            if (showDebug)
+              printMsg("Send to JMRI - WEST occupied");
           }
         }
         else
@@ -546,13 +570,17 @@ bool procDetectors(byte blockID, bool increase)
           if (bod[i].westCount > 0)
           {
             bod[i].westCount--;
-            // BTSerial.print("westcount ");
-            // BTSerial.println(bod[i].westCount);
+            if (showDebug)
+            {
+              BTSerial.print("westcount ");
+              BTSerial.println(bod[i].westCount);
+            }
             if (bod[i].westCount == 0) // went from one to zero so notify JMRI this block now unoccupied
             {
               // send a message to JMRI
               client.publish(localTopic, "INACTIVE");
-              // printMsg("Send to JMRI - WEST vacant");
+              if (showDebug)
+                printMsg("Send to JMRI - WEST vacant");
             }
           }
         }
@@ -566,12 +594,16 @@ bool procDetectors(byte blockID, bool increase)
         if (increase)
         {
           bod[i].eastCount++;
-          // BTSerial.print("eastcount ");
-          // BTSerial.println(bod[i].eastCount);
+          if (showDebug)
+          {
+            BTSerial.print("eastcount ");
+            BTSerial.println(bod[i].eastCount);
+          }
           if (bod[i].eastCount == 1)
           {
             client.publish(localTopic, "ACTIVE");
-            // printMsg("Send to JMRI - EAST occupied");
+            if (showDebug)
+              printMsg("Send to JMRI - EAST occupied");
           }
         }
         else
@@ -579,13 +611,17 @@ bool procDetectors(byte blockID, bool increase)
           if (bod[i].eastCount > 0)
           {
             bod[i].eastCount--;
-            // BTSerial.print("eastcount ");
-            // BTSerial.println(bod[i].eastCount);
+            if (showDebug)
+            {
+              BTSerial.print("eastcount ");
+              BTSerial.println(bod[i].eastCount);
+            }
             if (bod[i].eastCount == 0)
             {
               // send a message to JMRI
               client.publish(localTopic, "INACTIVE");
-              // printMsg("Send to JMRI - EAST vacant");
+              if (showDebug)
+                printMsg("Send to JMRI - EAST vacant");
             }
           }
         }
@@ -674,7 +710,7 @@ void showMenu()
   BTSerial.println(" 'S' - Speedometer configuration");
   BTSerial.println(" 'G' - Ghostbuster");
   BTSerial.println(" 'Z' - Turn off Bluetooth (ground pin 5 to resume)");
-  // BTSerial.println(" 'X' - Debug display on/off");
+  BTSerial.println(" 'X' - Debug display on/off");
   BTSerial.println(" 'Y' - Restart machine");
 
   BTSerial.println("\nEnter 'Q' to return to run mode (30 sec timeout)");
@@ -833,7 +869,7 @@ void configure()
       break;
 
     case 'N': // node name
-      BTSerial.println("Enter a name for this node or blank to exit. Used by MQTT, must be unique: ");
+      BTSerial.println("\nEnter a name for this node or blank to exit. Used by MQTT, must be unique: ");
       while (!BTSerial.available())
       {
       }
@@ -858,11 +894,9 @@ void configure()
       break;
 
     case 'X': // debug
-      BTSerial.println("Turn debug display on ('Y') or off ('N') ");
-      myChar = getUpperChar(30000);
-      BTSerial.println("Which detector (1-8)?");
-      devID = getNumber(1, 8);
-      bod[devID - 1].setDisplayDetect(myChar == 'Y');
+      BTSerial.println("\nTurn debug display on ('Y') or off ('N') ");
+      myChar = getUpperChar(millis());
+      showDebug = (myChar == 'Y');
       break;
 
     case 'Q': // return
