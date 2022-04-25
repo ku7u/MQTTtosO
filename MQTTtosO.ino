@@ -59,7 +59,7 @@ SOFTWARE.
 
 using namespace std;
 
-const char *version = "6.0";
+const char *version = "7.0";
 
 bool showDebug = false;
 
@@ -72,9 +72,7 @@ String wifiPassword;
 
 String mqttServer;
 String mqttNode;
-String mqttChannel;
 String topicLeftEnd;
-char mqttchannel[50];
 char blockTopic[100];
 char keeperQueryIncreaseTopic[100];
 char keeperQueryDecreaseTopic[100];
@@ -189,9 +187,7 @@ void setup()
   SSID = myPrefs.getString("SSID", "none");
   wifiPassword = myPrefs.getString("wifipassword", "none");
   mqttServer = myPrefs.getString("mqttserver", "none");
-  mqttChannel = myPrefs.getString("mqttchannel", "trains/");
   topicLeftEnd = myPrefs.getString("topicleftend", "trains/track/sensor/");
-  strcpy(mqttchannel, mqttChannel.c_str());
   speedometerEnabled = myPrefs.getBool("speedoenabled", false);
 
   // Bluetooth
@@ -213,17 +209,10 @@ void setup()
   connectMQTT();
 
   // BOD specific
-  setupSubscriptions(); // also must be called on a reconnect
 
   // define topics
   strcpy(blockTopic, topicLeftEnd.c_str());
   strcat(blockTopic, "BOD/block/");
-  // strcpy(keeperQueryIncreaseTopic, topicLeftEnd.c_str());
-  // strcat(keeperQueryIncreaseTopic, "looseblock/increase");
-  // strcat(keeperQueryIncreaseTopic, "keeperquery/increase");
-  // strcpy(keeperQueryDecreaseTopic, topicLeftEnd.c_str());
-  // strcat(keeperQueryDecreaseTopic, "looseblock/decrease");
-  // strcat(keeperQueryDecreaseTopic, "keeperquery/decrease");
   strcpy(keeperQueryTopic, topicLeftEnd.c_str());
   strcat(keeperQueryTopic, "keeperquery/");
 
@@ -231,6 +220,8 @@ void setup()
   strcat(ghostBlockZeroTopic, "send/BOD/block/");
   strcpy(speedTopic, topicLeftEnd.c_str());
   strcat(speedTopic, "speed/");
+
+  setupSubscriptions(); // also must be called on a reconnect
 
   // read the detector parameters from memory and apply to objects
   for (int i = 0; i < numDevices; i++)
@@ -368,13 +359,9 @@ void connectMQTT()
 void setupSubscriptions()
 {
   char subscription[50];
-  // strcpy(subscription, mqttchannel);
-  // strcat(subscription, "looseblock/+");
   strcpy(subscription, topicLeftEnd.c_str());
   strcat(subscription, "keeperquery/+");
   client.subscribe(subscription, 1); // accept all channel/looseBlock topics
-  // strcpy(subscription, mqttchannel);
-  // strcat(subscription, "track/sensor/send/BOD/block/+"); // these are ghost buster (zero a block) commands from JMRI
   strcpy(subscription, topicLeftEnd.c_str());
   strcat(subscription, "send/BOD/block/+");
   client.subscribe(subscription, 1);
