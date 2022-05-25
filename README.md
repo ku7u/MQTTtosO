@@ -12,7 +12,7 @@ A Bluetooth password can be supplied to prevent local hackers from tinkering wit
 
 After configuring the above, reboot the device using the menu.
 
-The left hand part of the MQTT topic set in the device must match the corresponding setting in JMRI. The default in JMRI is "/trains/track/sensor/". The leading slash is incorrect, remove it in JMRI. The default topic left hand part in the device is "trains/track/sensor", without the slash. This string can be changed using the menu, but it must match the equivalent string in JMRI.
+The left hand part of the MQTT topic set in the device must match the corresponding setting in JMRI. The default in JMRI is "/trains/track/sensor/". The leading slash is incorrect, remove it in JMRI. The default topic left hand part in the device is "trains/track/sensor/". This string can be changed using the menu, but it must match the equivalent string in JMRI.
 
 The topic string must be specified in a certain way in JMRI. The inbound sensor topic must be left as is, namely 'track/sensor/'. The outbound sensor topic must be changed to 'track/sensor/send/' to be compatible with the block zeroing (ghostbuster) feature. The system name in JMRI for a sensor must be of the form 'BOD/block/\<blockID\>'. Topic strings are case sensitive. Resulting data sent from the device will be 'trains/track/sensor/BOD/block/\<blockID\>' which is a little wordy but helps to avoid confusion when troubleshooting. It also allows for other kinds of sensors with names other than 'BOD' to be configured. 'blockID' must be a number.
 
